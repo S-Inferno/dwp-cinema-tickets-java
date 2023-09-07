@@ -80,7 +80,9 @@ public class TicketServiceImpl implements TicketService {
 
     /**
      * This method calculate the total ticket price and total number of ticket booked
-     * based on te business logic.
+     * based on the business logic.
+     * Created a new TicketInformation class with variable totalTicketPrice
+     * and totalSeatBooked to store the information for this method.
      *
      * @param ticketTypeRequestList input list of all the ticket with count and type.
      * @return TicketInformation which has total ticket price and total seat booked.
