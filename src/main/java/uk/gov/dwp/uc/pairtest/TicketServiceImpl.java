@@ -15,10 +15,15 @@ import java.util.Map;
 import static java.util.Map.entry;
 
 public class TicketServiceImpl implements TicketService {
+
     /**
-     * Should only have private methods other than the one below.
+     * Global variable for maximum ticket limit. Can be variable in Db or Config file.
      */
     private final int MAX_TICKET_ALLOWED_COUNT = 20;
+
+    /**
+     * Global variable for all the ticket price. Can be variable in Db or Config file.
+     */
     private final Map<TicketTypeRequest.Type, Integer> TICKET_PRICE = Map.ofEntries(
             entry(TicketTypeRequest.Type.INFANT, 0),
             entry(TicketTypeRequest.Type.CHILD, 10),
@@ -27,22 +32,31 @@ public class TicketServiceImpl implements TicketService {
 
     @Override
     public void purchaseTickets(Long accountId, TicketTypeRequest... ticketTypeRequests) throws InvalidPurchaseException {
+        //Converting java varargs into ArrayList.
         List<TicketTypeRequest> ticketTypeRequestList = Arrays.asList(ticketTypeRequests);
 
+        // Check for invalid account if account id is below 0.
         if (accountId < 1) {
             throw new InvalidPurchaseException("Invalid Account.");
         }
 
+        //Check if at least one entry should be present for any ticket type.
         ticketTypeRequestList.stream().findAny()
                 .orElseThrow(() -> new InvalidPurchaseException("Please add at least 1 Adult ticket."));
 
         checkMaxTicketLimit(ticketTypeRequestList);
         checkIfAdult(ticketTypeRequestList);
         TicketInformation ticketInformation = calculatePriceAndSeat(ticketTypeRequestList);
-        handlePayment(accountId, ticketInformation);
+        handlePaymentAndBooking(accountId, ticketInformation);
 
     }
 
+    /**
+     * This method count the total ticket user trying to book and if the count exceeds
+     * the maximum limit then throws the exception.
+     *
+     * @param ticketTypeRequestList input list of all the ticket with count and type.
+     */
     private void checkMaxTicketLimit(final List<TicketTypeRequest> ticketTypeRequestList) {
         int ticketCount = ticketTypeRequestList.stream().mapToInt(TicketTypeRequest::getNoOfTickets).sum();
         if (ticketCount > MAX_TICKET_ALLOWED_COUNT) {
@@ -51,6 +65,12 @@ public class TicketServiceImpl implements TicketService {
         }
     }
 
+    /**
+     * This method count checks if Adult ticket type is present in the request. If not
+     * methods throws the exception.
+     *
+     * @param ticketTypeRequestList input list of all the ticket with count and type.
+     */
     private void checkIfAdult(final List<TicketTypeRequest> ticketTypeRequestList) {
         ticketTypeRequestList.stream()
                 .filter(ticketTypeRequest -> ticketTypeRequest.getTicketType().equals(TicketTypeRequest.Type.ADULT))
@@ -58,6 +78,14 @@ public class TicketServiceImpl implements TicketService {
                 .orElseThrow(() -> new InvalidPurchaseException("Child and Infant tickets cannot be purchased without purchasing an Adult ticket."));
     }
 
+    /**
+     * This method calculate the total ticket price and total number of ticket booked
+     * based on te business logic.
+     *
+     * @param ticketTypeRequestList input list of all the ticket with count and type.
+     * @return TicketInformation which has total ticket price and total seat booked.
+     * @see TicketInformation
+     */
     private TicketInformation calculatePriceAndSeat(final List<TicketTypeRequest> ticketTypeRequestList) {
         int totalTicketPrice = 0;
         int totalSeatBooked = 0;
@@ -77,7 +105,7 @@ public class TicketServiceImpl implements TicketService {
                     totalTicketPrice += 0;
                     totalSeatBooked += 0;
                 }
-                default -> throw new InvalidPurchaseException("Sorry there is some problem with the server.");
+                default -> throw new InvalidPurchaseException("Sorry, there is some problem with the server.");
             }
         }
 
@@ -87,13 +115,27 @@ public class TicketServiceImpl implements TicketService {
         return ticketInformation;
     }
 
-    private void handlePayment(final Long accountId, final TicketInformation ticketInformation) {
+    /**
+     * This method calls third party payment and seat reservation service and completes the booking.
+     *
+     * @param accountId         - User account information
+     * @param ticketInformation which has total ticket price and total seat booked.
+     */
+    private void handlePaymentAndBooking(final Long accountId, final TicketInformation ticketInformation) {
+        //Just to print the for logs what is total ticket price and total seat reserved.
         System.out.println("Total ticket price: " + ticketInformation.getTotalTicketPrice());
         System.out.println("Total seat book: " + ticketInformation.getTotalSeatBooked());
-        TicketPaymentService ticketPaymentService = new TicketPaymentServiceImpl();
-        ticketPaymentService.makePayment(accountId, ticketInformation.getTotalTicketPrice());
 
-        SeatReservationService seatReservationService = new SeatReservationServiceImpl();
-        seatReservationService.reserveSeat(accountId, ticketInformation.getTotalSeatBooked());
+        //Just to handle exception if any.
+        try {
+            TicketPaymentService ticketPaymentService = new TicketPaymentServiceImpl();
+            ticketPaymentService.makePayment(accountId, ticketInformation.getTotalTicketPrice());
+
+            SeatReservationService seatReservationService = new SeatReservationServiceImpl();
+            seatReservationService.reserveSeat(accountId, ticketInformation.getTotalSeatBooked());
+        } catch (Exception e) {
+            throw new InvalidPurchaseException("Sorry, there is some problem with the server.");
+        }
+
     }
 }
