@@ -28,33 +28,34 @@ public class TicketServiceImpl implements TicketService {
     @Override
     public void purchaseTickets(Long accountId, TicketTypeRequest... ticketTypeRequests) throws InvalidPurchaseException {
         List<TicketTypeRequest> ticketTypeRequestList = Arrays.asList(ticketTypeRequests);
-        checkTicketAndAdult(ticketTypeRequestList);
-        TicketInformation ticketInformation = calculatePriceAndSeat(ticketTypeRequestList);
 
+        if (accountId < 1) {
+            throw new InvalidPurchaseException("Invalid Account.");
+        }
+
+        ticketTypeRequestList.stream().findAny()
+                .orElseThrow(() -> new InvalidPurchaseException("Please add at least 1 Adult ticket."));
+
+        checkMaxTicketLimit(ticketTypeRequestList);
+        checkIfAdult(ticketTypeRequestList);
+        TicketInformation ticketInformation = calculatePriceAndSeat(ticketTypeRequestList);
         handlePayment(accountId, ticketInformation);
 
     }
 
-    private void checkTicketAndAdult(final List<TicketTypeRequest> ticketTypeRequestList) {
-        int ticketCount = 0;
-        boolean isAdultPresent = false;
-        boolean isChildOrInfant = false;
-        for (TicketTypeRequest ticketTypeRequest : ticketTypeRequestList) {
-            ticketCount += ticketTypeRequest.getNoOfTickets();
-            if (ticketTypeRequest.getTicketType().equals(TicketTypeRequest.Type.ADULT)) {
-                isAdultPresent = true;
-            } else {
-                isChildOrInfant = true;
-            }
-        }
+    private void checkMaxTicketLimit(final List<TicketTypeRequest> ticketTypeRequestList) {
+        int ticketCount = ticketTypeRequestList.stream().mapToInt(TicketTypeRequest::getNoOfTickets).sum();
         if (ticketCount > MAX_TICKET_ALLOWED_COUNT) {
             throw new InvalidPurchaseException("You trying to purchase " + ticketCount +
                     " tickets. Max ticket allowed to be purchased is " + MAX_TICKET_ALLOWED_COUNT + ".");
         }
+    }
 
-        if (!isAdultPresent && isChildOrInfant) {
-            throw new InvalidPurchaseException("Child and Infant tickets cannot be purchased without purchasing an Adult ticket.");
-        }
+    private void checkIfAdult(final List<TicketTypeRequest> ticketTypeRequestList) {
+        ticketTypeRequestList.stream()
+                .filter(ticketTypeRequest -> ticketTypeRequest.getTicketType().equals(TicketTypeRequest.Type.ADULT))
+                .findAny()
+                .orElseThrow(() -> new InvalidPurchaseException("Child and Infant tickets cannot be purchased without purchasing an Adult ticket."));
     }
 
     private TicketInformation calculatePriceAndSeat(final List<TicketTypeRequest> ticketTypeRequestList) {
@@ -87,6 +88,8 @@ public class TicketServiceImpl implements TicketService {
     }
 
     private void handlePayment(final Long accountId, final TicketInformation ticketInformation) {
+        System.out.println("Total ticket price: " + ticketInformation.getTotalTicketPrice());
+        System.out.println("Total seat book: " + ticketInformation.getTotalSeatBooked());
         TicketPaymentService ticketPaymentService = new TicketPaymentServiceImpl();
         ticketPaymentService.makePayment(accountId, ticketInformation.getTotalTicketPrice());
 
